@@ -1,0 +1,7 @@
+# Generated at setup time
+claude.seccomp.bpf
+.claude-sandbox.env
+
+# Python bytecode (gen-seccomp-bpf.py is invoked as a script, not imported)
+__pycache__/
+*.pyc

@@ -1,0 +1,83 @@
+# Syscalls denied inside the Claude Code sandbox.
+# One syscall per line; '#' starts a comment.
+# This list is cribbed from firejail's default seccomp filter, with a few
+# deliberate omissions documented in the README.
+#
+# Re-run claude-sandbox-setup.sh after editing to regenerate the BPF.
+
+# Loadable kernel modules
+create_module
+delete_module
+finit_module
+get_kernel_syms
+init_module
+query_module
+
+# Kernel exec / reboot
+kexec_file_load
+kexec_load
+reboot
+
+# Privileged filesystem ops
+mount
+umount
+umount2
+pivot_root
+swapon
+swapoff
+quotactl
+nfsservctl
+uselib
+
+# fanotify/file-handle abuse (open_by_handle_at + name_to_handle_at lets you
+# open files by NFS-style handles, bypassing path-based MAC checks)
+name_to_handle_at
+open_by_handle_at
+
+# Time setters
+clock_settime
+settimeofday
+stime
+
+# Process accounting, low-level kernel
+acct
+sysfs
+_sysctl
+
+# Performance / tracing / kernel introspection
+perf_event_open
+ptrace
+kcmp
+lookup_dcookie
+
+# Key management
+add_key
+keyctl
+request_key
+
+# Memory policy / NUMA
+mbind
+move_pages
+set_mempolicy
+
+# Namespaces (don't let code inside the sandbox build new namespaces).
+# Note: bwrap creates the sandbox by calling these BEFORE the filter is loaded,
+# so blocking them here only affects code running INSIDE the sandbox.
+setns
+
+# io_uring -- broad attack surface, has had multiple LPE CVEs
+io_uring_setup
+io_uring_enter
+io_uring_register
+
+# eBPF -- broad attack surface, frequent CVE source
+bpf
+
+# Userfaultfd -- has been used to widen race-window LPEs
+userfaultfd
+
+# Misc legacy
+personality
+ustat
+vm86
+vm86old
