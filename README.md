@@ -4,7 +4,7 @@ Run [Claude Code](https://claude.com/claude-code) inside a [bubblewrap](https://
 
 The installer itself (`curl -fsSL https://claude.ai/install.sh | bash`) also runs inside a sandbox with `$HOME` bound to a dedicated install home, so the install step cannot touch your real `~/.ssh`, `~/.bashrc`, browser data, or anything else outside that directory.
 
-> **Disclaimer:** Personal project, not affiliated with or endorsed by Anthropic or the bubblewrap authors. The sandbox is best-effort -- Linux user-namespace isolation is not a security boundary against a determined attacker, and escape paths exist (in particular through bound container sockets and unrestricted network egress). Review [`claude-sandbox.sh`](claude-sandbox.sh) and [`claude.seccomp.deny.list`](claude.seccomp.deny.list) before use. Provided as-is, no warranty (see [LICENSE](LICENSE)).
+> **Disclaimer:** Personal project, not affiliated with or endorsed by Anthropic or the bubblewrap authors. The sandbox is best-effort -- Linux user-namespace isolation is not a security boundary against a determined attacker, and escape paths exist (in particular through unrestricted network egress and any opt-in container-socket passthrough). Review [`claude-sandbox.sh`](claude-sandbox.sh) and [`claude.seccomp.deny.list`](claude.seccomp.deny.list) before use. Provided as-is, no warranty (see [LICENSE](LICENSE)).
 
 ## What the sandbox enforces
 
@@ -96,7 +96,7 @@ Claude Code, like git, is per-project: `cd` into the project before running. The
    CLAUDE_SANDBOX_WORKSPACE=~/proj/some-repo claude
    ```
 
-2. **Auto-narrow** when `--dangerously-skip-permissions` is detected anywhere in argv: the launcher narrows the writable workspace to PWD and drops the container-socket passthrough (the other obvious escape hatch). If PWD is not a sub-directory of `WORKSPACE_DIR`, it warns and proceeds with the full workspace. Set `CLAUDE_SANDBOX_WORKSPACE` to opt out of the auto-narrow.
+2. **Auto-narrow** when `--dangerously-skip-permissions` is detected anywhere in argv: the launcher narrows the writable workspace to PWD. If PWD is not a sub-directory of `WORKSPACE_DIR`, it warns and proceeds with the full workspace. Set `CLAUDE_SANDBOX_WORKSPACE` to opt out of the auto-narrow. The container-socket opt-in (see Docker / Podman below) is also force-ignored under this flag.
 
 This way `cd ~/proj/some-repo && claude --dangerously-skip-permissions` autonomously edits only that one repo, with no access to siblings under `~/proj` and no container-socket escape.
 
@@ -108,14 +108,22 @@ Shell rc files are exposed read-only too: `~/.bashrc`, `~/.profile`, `~/.bash_pr
 
 ## Docker / Podman
 
-If a Docker or Podman socket is running on the host, the launcher binds it through. Use `--remote` from inside the sandbox to talk to the host daemon:
+**Off by default.** The host Docker/Podman socket is not exposed inside the sandbox unless you opt in. Anything launched via that socket runs *on the host as your real user, outside the sandbox* — and a process that can talk to the daemon can trivially ask it to run a privileged container with `/` bind-mounted in, which is equivalent to host root (Docker / rootful Podman) or full account access (rootless Podman). Binding the socket therefore defeats the rest of the sandbox.
+
+Opt in only if you accept that trade-off:
+
+```bash
+CLAUDE_SANDBOX_BIND_CONTAINER_SOCKET=1 claude
+```
+
+Inside the sandbox, talk to the host daemon over its API by adding `--remote`:
 
 ```bash
 podman --remote ps
 docker --remote info
 ```
 
-**Caution:** anything launched this way executes on the host as your real user, *outside* the sandbox. This is a deliberate convenience that doubles as an escape hatch. The launcher drops this passthrough automatically when `--dangerously-skip-permissions` is detected (see below); for other cases where you want isolation, stop your user-mode podman / docker daemon before launching or remove the passthrough block from [`claude-sandbox.sh`](claude-sandbox.sh).
+The opt-in is **always ignored under `--dangerously-skip-permissions`** — a yolo-mode loop with the host socket would have no effective bound at all. To make the opt-in persistent for normal runs, export the variable in your shell rc.
 
 ## Extending the sandbox
 
@@ -143,10 +151,8 @@ Under this sandbox, `--dangerously-skip-permissions` (or "yolo mode") means **"b
 
 When the launcher sees this flag in argv it automatically:
 
-- Narrows the writable workspace from `WORKSPACE_DIR` to `$PWD` (assuming PWD is inside the workspace).
-- Drops the container-socket passthrough.
-
-Both behaviours can be overridden with `CLAUDE_SANDBOX_WORKSPACE=...` (for the workspace) or by editing the passthrough block in [`claude-sandbox.sh`](claude-sandbox.sh).
+- Narrows the writable workspace from `WORKSPACE_DIR` to `$PWD` (assuming PWD is inside the workspace). Override with `CLAUDE_SANDBOX_WORKSPACE=...`.
+- Force-ignores `CLAUDE_SANDBOX_BIND_CONTAINER_SOCKET=1`. The host container socket is off by default for normal runs too (see Docker / Podman); under yolo it can't be turned on at all, since an autonomous loop with the host socket would have no effective bound.
 
 Caveats that still apply with this flag:
 

@@ -54,17 +54,19 @@ fi
 # Two mechanisms can narrow it further (never widen):
 #   1. CLAUDE_SANDBOX_WORKSPACE=...  explicit override; must be inside WORKSPACE_DIR
 #   2. --dangerously-skip-permissions in argv  auto-narrow to PWD (the running
-#      project), and also drop the container-socket passthrough (escape hatch).
+#      project), and also force-drop any container-socket passthrough.
 override_set=false
 [[ -n "${CLAUDE_SANDBOX_WORKSPACE:-}" ]] && override_set=true
+yolo=false
+for arg in "$@"; do
+    if [[ "$arg" == "--dangerously-skip-permissions" ]]; then
+        yolo=true
+        break
+    fi
+done
 auto_narrow=false
-if ! "$override_set"; then
-    for arg in "$@"; do
-        if [[ "$arg" == "--dangerously-skip-permissions" ]]; then
-            auto_narrow=true
-            break
-        fi
-    done
+if "$yolo" && ! "$override_set"; then
+    auto_narrow=true
 fi
 
 effective_workspace="$WORKSPACE_DIR"
@@ -81,7 +83,7 @@ elif "$auto_narrow"; then
     if [[ "$PWD" != "$WORKSPACE_DIR" && "$PWD/" == "$WORKSPACE_DIR/"* ]]; then
         effective_workspace="$PWD"
         echo "Notice: --dangerously-skip-permissions detected; narrowing writable workspace" >&2
-        echo "        from $WORKSPACE_DIR to $effective_workspace, and dropping container socket." >&2
+        echo "        from $WORKSPACE_DIR to $effective_workspace." >&2
         echo "        Override with CLAUDE_SANDBOX_WORKSPACE=... if you want a different scope." >&2
     else
         echo "Warning: --dangerously-skip-permissions but PWD=$PWD is not a sub-directory of" >&2
@@ -239,10 +241,20 @@ if [[ -n "$PROXY_DIR" && -S "$PROXY_DIR/bus" ]]; then
 fi
 
 # Container socket passthrough (host-side daemon access via --remote).
-# Skipped under --dangerously-skip-permissions because anything Claude runs
-# through the socket executes on the host as the real user, outside the sandbox.
-if ! "$auto_narrow"; then
-    if [[ -S "$XDG_DIR/podman/podman.sock" ]]; then
+# OFF by default: a process that can talk to the host daemon socket can ask
+# it to run a privileged container with `/` mounted in -- effectively root on
+# the host (rootful Docker / rootful Podman) or full access to your user
+# account (rootless Podman). That trivially escapes the sandbox.
+#
+# Opt in via CLAUDE_SANDBOX_BIND_CONTAINER_SOCKET=1, but never under
+# --dangerously-skip-permissions: in yolo mode Claude runs every tool call
+# without prompting, and an autonomous loop with the host socket would have
+# no effective bound at all.
+if [[ "${CLAUDE_SANDBOX_BIND_CONTAINER_SOCKET:-0}" == "1" ]]; then
+    if "$yolo"; then
+        echo "Notice: CLAUDE_SANDBOX_BIND_CONTAINER_SOCKET=1 ignored under" >&2
+        echo "        --dangerously-skip-permissions (host socket = unbounded escape)." >&2
+    elif [[ -S "$XDG_DIR/podman/podman.sock" ]]; then
         ARGS+=(--bind "$XDG_DIR/podman/podman.sock" "$XDG_DIR/podman/podman.sock")
     elif [[ -S "/var/run/docker.sock" ]]; then
         ARGS+=(--bind "/var/run/docker.sock" "/var/run/docker.sock")
