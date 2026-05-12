@@ -93,13 +93,27 @@ elif "$auto_narrow"; then
 fi
 
 # ── Working directory inside the sandbox ─────────────────────────────
-# If PWD is inside the effective workspace, preserve it; otherwise fall back
-# to the workspace root (the host PWD won't exist inside the sandbox).
-sandbox_cwd="$effective_workspace"
-if [[ "$PWD/" == "$effective_workspace/"* ]]; then
+# Precedence:
+#   1. $CLAUDE_SANDBOX_CWD -- explicit caller override. Must be a directory;
+#      must also be bound into the sandbox or bwrap will fail at chdir.
+#   2. $PWD when it sits under the effective workspace or under ~/.claude.
+#      Other writable binds added via the local profile aren't auto-detected;
+#      use CLAUDE_SANDBOX_CWD for those.
+#   3. Effective workspace root (with a notice when PWD was elsewhere).
+if [[ -n "${CLAUDE_SANDBOX_CWD:-}" ]]; then
+    sandbox_cwd="$(readlink -f "$CLAUDE_SANDBOX_CWD")"
+    if [[ ! -d "$sandbox_cwd" ]]; then
+        echo "Error: CLAUDE_SANDBOX_CWD ($CLAUDE_SANDBOX_CWD) is not a directory." >&2
+        exit 1
+    fi
+elif [[ "$PWD" == "$effective_workspace" || "$PWD/" == "$effective_workspace/"* ]]; then
     sandbox_cwd="$PWD"
-elif [[ "$PWD" != "$effective_workspace" ]]; then
-    echo "Notice: current directory $PWD is outside the (effective) workspace; starting in $effective_workspace." >&2
+elif [[ "$PWD" == "$HOME/.claude" || "$PWD/" == "$HOME/.claude/"* ]]; then
+    sandbox_cwd="$PWD"
+else
+    sandbox_cwd="$effective_workspace"
+    echo "Notice: current directory $PWD is not exposed inside the sandbox; starting in $sandbox_cwd." >&2
+    echo "        Set CLAUDE_SANDBOX_CWD=... to start in a custom bind path." >&2
 fi
 
 # ── xdg-dbus-proxy (filtered session bus for the portal OAuth flow) ──

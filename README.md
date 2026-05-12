@@ -86,6 +86,14 @@ The wrapper at `~/.local/bin/claude` is the only `claude` on your PATH; it alway
 
 Claude Code, like git, is per-project: `cd` into the project before running. The sandbox's `WORKSPACE_DIR` (set at setup) is the *outer* bound — by default the parent directory of all your projects. Claude itself still treats the cwd as the project root (`~/.claude/projects/` keys by absolute path, `CLAUDE.md` discovery walks up from cwd).
 
+`$PWD` is also preserved when it sits under `~/.claude` (handy for editing `settings.json`, agents, or MCP config from inside Claude). For any other bound path — e.g. an extra `--bind` added through the local profile — set `CLAUDE_SANDBOX_CWD` explicitly:
+
+```bash
+CLAUDE_SANDBOX_CWD=~/some/bound/path claude
+```
+
+If `$PWD` is outside both the workspace and `~/.claude`, and `CLAUDE_SANDBOX_CWD` is not set, the launcher prints a notice and starts in the workspace root.
+
 ### Narrowing the writable scope per invocation
 
 `WORKSPACE_DIR` can be narrowed (never widened) at invocation time in two ways:
