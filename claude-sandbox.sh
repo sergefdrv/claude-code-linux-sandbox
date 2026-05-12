@@ -249,8 +249,28 @@ if ! "$auto_narrow"; then
     fi
 fi
 
-# Optional user extension hook: extra bwrap args from $CLAUDE_SANDBOX_EXTRA_ARGS.
-# Space-separated, IFS-split.  Use sparingly -- each entry widens the sandbox.
+# Optional site-local extension hook (persistent equivalent of the
+# $CLAUDE_SANDBOX_EXTRA_ARGS env var below).  Plain text: one bwrap
+# directive per line, `#` starts a comment, blank lines ignored.
+# Variables ($HOME, $INSTALL_DIR, ...) are expanded.  Lives in
+# $INSTALL_DIR so it's outside the sandbox's writable scope.
+# See README ("Extending the sandbox") for examples.
+LOCAL_PROFILE="$INSTALL_DIR/claude-sandbox.local"
+if [[ -f "$LOCAL_PROFILE" ]]; then
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+        _line="${_line%%#*}"
+        read -r _line <<<"$_line" || true   # trim leading/trailing whitespace
+        [[ -z "$_line" ]] && continue
+        # eval: enables ${HOME}-style expansion and quoting; trust model
+        # is the same as sourcing -- file lives in $INSTALL_DIR.
+        eval "ARGS+=( $_line )"
+    done < "$LOCAL_PROFILE"
+    unset _line
+fi
+
+# Optional per-invocation extension hook: extra bwrap args from
+# $CLAUDE_SANDBOX_EXTRA_ARGS.  Space-separated, IFS-split.  Use sparingly --
+# each entry widens the sandbox.
 if [[ -n "${CLAUDE_SANDBOX_EXTRA_ARGS:-}" ]]; then
     # shellcheck disable=SC2206
     EXTRA=( $CLAUDE_SANDBOX_EXTRA_ARGS )

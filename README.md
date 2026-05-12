@@ -117,15 +117,25 @@ docker --remote info
 
 **Caution:** anything launched this way executes on the host as your real user, *outside* the sandbox. This is a deliberate convenience that doubles as an escape hatch. The launcher drops this passthrough automatically when `--dangerously-skip-permissions` is detected (see below); for other cases where you want isolation, stop your user-mode podman / docker daemon before launching or remove the passthrough block from [`claude-sandbox.sh`](claude-sandbox.sh).
 
-## MCP servers and extending the sandbox
+## Extending the sandbox
 
-MCP servers run as subprocesses inside the sandbox. If a server needs filesystem paths or sockets beyond the workspace + `~/.claude`, you can splice extra bwrap args via the `CLAUDE_SANDBOX_EXTRA_ARGS` environment variable:
+MCP servers run as subprocesses inside the sandbox. If a server (or any code Claude runs) needs filesystem paths or sockets beyond the workspace + `~/.claude`, there are two hooks to splice extra bwrap arguments in. Each entry widens the sandbox -- use sparingly.
+
+**Persistent: `~/.local/opt/claude-sandbox/claude-sandbox.local`** — plain text, one bwrap directive per line. `#` starts a comment, blank lines are ignored, and `${HOME}` / `${INSTALL_DIR}` / other env vars are expanded:
+
+```
+# Expose an extra tool's install + state dirs.
+--ro-bind /opt/foo /opt/foo
+--bind    ${HOME}/.config/foo ${HOME}/.config/foo
+```
+
+The file lives alongside the installed launcher (outside the sandbox's writable scope), so it can't be tampered with from inside Claude.
+
+**Per-invocation: `$CLAUDE_SANDBOX_EXTRA_ARGS`** — space-separated bwrap args for a single launch:
 
 ```bash
 CLAUDE_SANDBOX_EXTRA_ARGS="--ro-bind /opt/something /opt/something" claude
 ```
-
-Each entry widens the sandbox. Use sparingly.
 
 ## The `--dangerously-skip-permissions` story
 
