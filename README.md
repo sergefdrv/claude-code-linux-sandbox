@@ -64,13 +64,10 @@ Setup flags:
 - `--force-reinstall` -- re-run the sandboxed installer even if a claude binary is already present.
 - `--uninstall` -- remove `~/.local/opt/claude-sandbox/` and the wrapper at `~/.local/bin/claude` (only if it is ours). Preserves `~/.claude/` and `~/.claude.json` so re-installing keeps you logged in.
 - `--uninstall --purge` -- also wipe `~/.claude/` and `~/.claude.json*` (logs you out, forgets MCP setup).
-- `--yes`, `-y` -- skip the interactive confirmation prompt.
 
 ### Migrating an existing native install
 
 If you already have a non-sandboxed claude at `~/.local/bin/claude` (from `curl ... | bash` run directly), setup will offer to migrate it: it moves `~/.local/bin/claude` and `~/.local/share/claude/` into the install home, then installs the wrapper in their place. Your `~/.claude/` (sessions, OAuth credentials, MCP config) is preserved.
-
-In non-interactive runs, setup aborts rather than migrate silently -- re-run interactively, or remove the prior install first.
 
 ## Usage
 

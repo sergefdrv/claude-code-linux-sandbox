@@ -13,24 +13,20 @@ SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 source "$SCRIPT_DIR/claude-sandbox-common.sh"
 
-interactive() { [[ -t 0 && -t 1 ]]; }
-
 # ── Parse args ───────────────────────────────────────────────────────
 NO_INSTALL=false
 FORCE_REINSTALL=false
 UNINSTALL=false
 PURGE=false
-ASSUME_YES=false
 for arg in "$@"; do
     case "$arg" in
         --no-install)      NO_INSTALL=true ;;
         --force-reinstall) FORCE_REINSTALL=true ;;
         --uninstall)       UNINSTALL=true ;;
         --purge)           PURGE=true ;;
-        --yes|-y)          ASSUME_YES=true ;;
         --help|-h)
             cat <<EOF
-Usage: $0 [--no-install | --force-reinstall | --uninstall [--purge]] [--yes]
+Usage: $0 [--no-install | --force-reinstall | --uninstall [--purge]]
 
   --no-install        Skip running Anthropic's installer even if the
                       install home is empty (expects a manual install
@@ -43,7 +39,6 @@ Usage: $0 [--no-install | --force-reinstall | --uninstall [--purge]] [--yes]
                       state, sessions, and OAuth credentials).
   --purge             With --uninstall, also remove ~/.claude/ and
                       ~/.claude.json* (logs you out, forgets MCP setup).
-  --yes, -y           Skip the interactive "are you sure?" prompt.
 
 Environment:
   WORKSPACE_DIR        Workspace directory bound rw inside the sandbox.
@@ -55,6 +50,14 @@ EOF
             ;;
     esac
 done
+
+# Setup prompts for the workspace dir, migration, and uninstall confirmation;
+# bail out early on a non-tty stdin/stdout rather than silently accepting
+# defaults (or, worse, mass-deleting on --uninstall).
+if [[ ! -t 0 || ! -t 1 ]]; then
+    echo "Error: $0 must be run interactively (stdin and stdout must be a TTY)." >&2
+    exit 1
+fi
 
 # ── Uninstall path ───────────────────────────────────────────────────
 if "$UNINSTALL"; then
@@ -100,15 +103,8 @@ if "$UNINSTALL"; then
         echo ""
     fi
 
-    if ! "$ASSUME_YES"; then
-        if interactive; then
-            read -rp "Proceed? [y/N] " answer
-            [[ "$answer" =~ ^[Yy] ]] || { echo "Aborted."; exit 0; }
-        else
-            echo "Error: refusing to uninstall non-interactively without --yes." >&2
-            exit 1
-        fi
-    fi
+    read -rp "Proceed? [y/N] " answer
+    [[ "$answer" =~ ^[Yy] ]] || { echo "Aborted."; exit 0; }
 
     # Best-effort removal: each step is independent; we report failures at the
     # end rather than aborting on the first error (otherwise a single rm fail
@@ -183,12 +179,8 @@ echo ""
 
 # ── Workspace ────────────────────────────────────────────────────────
 if [[ -z "$WORKSPACE_DIR" ]]; then
-    if interactive; then
-        read -rp "Enter workspace directory [$HOME/proj]: " WORKSPACE_DIR
-        WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/proj}"
-    else
-        WORKSPACE_DIR="$HOME/proj"
-    fi
+    read -rp "Enter workspace directory [$HOME/proj]: " WORKSPACE_DIR
+    WORKSPACE_DIR="${WORKSPACE_DIR:-$HOME/proj}"
 fi
 mkdir -p "$WORKSPACE_DIR"
 WORKSPACE_DIR="$(readlink -f "$WORKSPACE_DIR")"
@@ -224,15 +216,9 @@ if [[ -n "$existing" ]]; then
     echo "  $INSTALL_HOME/.local/bin/claude"
     echo "  $INSTALL_HOME/.local/share/claude/"
     echo ""
-    if interactive; then
-        read -rp "Proceed with migration? [Y/n] " answer
-        if [[ -n "$answer" && ! "$answer" =~ ^[Yy] ]]; then
-            echo "Aborted by user. No changes made."
-            exit 1
-        fi
-    else
-        echo "Error: non-interactive run found a foreign claude install." >&2
-        echo "Re-run setup interactively, or remove the prior install first." >&2
+    read -rp "Proceed with migration? [Y/n] " answer
+    if [[ -n "$answer" && ! "$answer" =~ ^[Yy] ]]; then
+        echo "Aborted by user. No changes made."
         exit 1
     fi
 
