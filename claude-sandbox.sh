@@ -49,6 +49,14 @@ if ! command -v bwrap &>/dev/null; then
     exit 1
 fi
 
+# Ensure package-manager cache directories exist on the host so the
+# writable binds below have something to mount. Idempotent.
+mkdir -p \
+    "$HOME/.cargo/registry" \
+    "$HOME/.npm/_cacache" \
+    "$HOME/.local/share/pnpm/store" \
+    "$HOME/.cache/pip"
+
 # ── Effective workspace (writable root) ──────────────────────────────
 # The configured WORKSPACE_DIR is the broadest the sandbox will ever allow.
 # Two mechanisms can narrow it further (never widen):
@@ -191,6 +199,17 @@ ARGS=(
     --ro-bind-try "$HOME/.nvm"    "$HOME/.nvm"
     --ro-bind-try "$HOME/.pyenv"  "$HOME/.pyenv"
     --ro-bind-try "$HOME/go"      "$HOME/go"
+
+    # Writable package-manager caches (shared with host).
+    # The package managers verify content integrity against lockfiles, so
+    # sharing these with the host does not let a sandboxed process forge
+    # cache contents. Adding these RW carve-outs makes `cargo build`,
+    # `npm install`, `pnpm install`, and `pip install` work inside the
+    # sandbox without falling back to "no cache" or failing on write.
+    --bind "$HOME/.cargo/registry"          "$HOME/.cargo/registry"
+    --bind "$HOME/.npm/_cacache"            "$HOME/.npm/_cacache"
+    --bind "$HOME/.local/share/pnpm/store"  "$HOME/.local/share/pnpm/store"
+    --bind "$HOME/.cache/pip"               "$HOME/.cache/pip"
 
     # Read-only shell rc + git config (so Claude's spawned shells feel familiar)
     --ro-bind-try "$HOME/.gitconfig"    "$HOME/.gitconfig"
