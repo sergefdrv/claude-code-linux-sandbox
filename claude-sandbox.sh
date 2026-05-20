@@ -55,7 +55,9 @@ mkdir -p \
     "$HOME/.cargo/registry" \
     "$HOME/.npm/_cacache" \
     "$HOME/.local/share/pnpm/store" \
-    "$HOME/.cache/pip"
+    "$HOME/.cache/pip" \
+    "$HOME/go/pkg/mod" \
+    "$HOME/.cache/go-build"
 
 # ── Effective workspace (writable root) ──────────────────────────────
 # The configured WORKSPACE_DIR is the broadest the sandbox will ever allow.
@@ -204,12 +206,15 @@ ARGS=(
     # The package managers verify content integrity against lockfiles, so
     # sharing these with the host does not let a sandboxed process forge
     # cache contents. Adding these RW carve-outs makes `cargo build`,
-    # `npm install`, `pnpm install`, and `pip install` work inside the
-    # sandbox without falling back to "no cache" or failing on write.
+    # `npm install`, `pnpm install`, `pip install`, and `go build` work
+    # inside the sandbox without falling back to "no cache" or failing
+    # on write.
     --bind "$HOME/.cargo/registry"          "$HOME/.cargo/registry"
     --bind "$HOME/.npm/_cacache"            "$HOME/.npm/_cacache"
     --bind "$HOME/.local/share/pnpm/store"  "$HOME/.local/share/pnpm/store"
     --bind "$HOME/.cache/pip"               "$HOME/.cache/pip"
+    --bind "$HOME/go/pkg/mod"               "$HOME/go/pkg/mod"
+    --bind "$HOME/.cache/go-build"          "$HOME/.cache/go-build"
 
     # Read-only shell rc + git config (so Claude's spawned shells feel familiar)
     --ro-bind-try "$HOME/.gitconfig"    "$HOME/.gitconfig"
