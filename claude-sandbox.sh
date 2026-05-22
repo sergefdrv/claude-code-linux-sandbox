@@ -259,6 +259,8 @@ ARGS+=(
     --setenv USER "${USER:-$(id -un)}"
     --setenv PATH "$INSTALL_DIR/bin:$HOME/.local/bin:$PATH"
     --setenv BROWSER "$INSTALL_DIR/bin/xdg-open"
+    --setenv EDITOR "${EDITOR:-}"
+    --setenv LANG "${LANG:-}"
     --setenv XDG_RUNTIME_DIR "$XDG_DIR"
     --setenv TMPDIR "/tmp"
 
@@ -269,6 +271,14 @@ ARGS+=(
     --new-session
     --cap-drop ALL
 )
+
+# Forward whichever LC_* category overrides the user has set on the host
+# (LC_ALL, LC_CTYPE, LC_COLLATE, ...). The set varies per system, so enumerate
+# from the live environment rather than hard-coding the list.
+for _lc_var in ${!LC_*}; do
+    ARGS+=(--setenv "$_lc_var" "${!_lc_var}")
+done
+unset _lc_var
 
 # Filtered session bus, only if the proxy came up.
 if [[ -n "$PROXY_DIR" && -S "$PROXY_DIR/bus" ]]; then
