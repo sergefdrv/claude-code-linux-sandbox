@@ -355,6 +355,15 @@ if [[ -n "${CLAUDE_SANDBOX_EXTRA_ARGS:-}" ]]; then
     ARGS+=( "${EXTRA[@]}" )
 fi
 
+# Flip the $HOME tmpfs read-only after all binds (including any added by
+# the extension hooks above) are in place. Each writable destination
+# under $HOME is its own bind mount, so they stay writable; only the
+# tmpfs root and any untouched subpaths become read-only. Subprocesses
+# that treat $HOME as a normal home (test harnesses dropping state,
+# language tooling creating ~/.cache/<thing>) then fail fast with EROFS
+# instead of quietly filling RAM with throwaway data.
+ARGS+=(--remount-ro "$HOME")
+
 # ── Seccomp BPF: open as FD, pass to bwrap via --seccomp <fd> ────────
 exec {seccomp_fd}<"$SECCOMP_BPF"
 ARGS+=(--seccomp "$seccomp_fd")
