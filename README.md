@@ -8,7 +8,7 @@ The installer itself (`curl -fsSL https://claude.ai/install.sh | bash`) also run
 
 ## What the sandbox enforces
 
-- **Filesystem isolation** -- `$HOME` is a tmpfs by default; only explicitly bound paths are visible (workspace rw, `~/.claude` rw, shell rc / git config / tool installs ro).
+- **Filesystem isolation** -- `$HOME` is a tmpfs by default; only explicitly bound paths are visible (workspace rw, `~/.claude` rw, shell rc / git config / tool installs ro). `~/.config`, `~/.cache`, and `~/.local` are sandbox-private overlays backed by `~/.local/share/claude-sandbox/`, so subprocess XDG writes persist on disk without touching the host's real ones.
 - **User namespace** -- no SUID binary involved, no root inside the sandbox, `NoNewPrivileges` set.
 - **All Linux capabilities dropped.**
 - **Seccomp filter** -- generated at setup time from [`claude.seccomp.deny.list`](claude.seccomp.deny.list); blocks ~40 syscalls historically tied to kernel exploits (io_uring, bpf, userfaultfd, kexec, ptrace, mount, etc.).
@@ -112,6 +112,10 @@ These directories are exposed **read-only** if they exist: `~/.cargo`, `~/.rustu
 Package-manager **caches** are carved out as **read-write** within those trees and shared with the host: `~/.cargo/registry`, `~/.npm/_cacache`, `~/.local/share/pnpm/store`, `~/.cache/pip`, `~/go/pkg/mod`, `~/.cache/go-build`. This lets `cargo build`, `npm install`, `pnpm install`, `pip install`, and `go build` work from within a workspace. Sharing is safe because each tool verifies cache content against a lockfile (cargo SHA-256 vs `Cargo.lock`, npm SRI vs `package-lock.json`, pnpm content-addressed store, pip `--require-hashes`, Go module SHA-256 vs `go.sum`), so a sandboxed process cannot substitute forged cache entries for host or other-project builds.
 
 Shell rc files are exposed read-only too: `~/.bashrc`, `~/.profile`, `~/.bash_profile`, `~/.zshrc`, `~/.zshenv`, `~/.inputrc`. Sub-shells Claude spawns will feel familiar.
+
+### XDG state: `~/.config`, `~/.cache`, `~/.local`
+
+Inside the sandbox, `~/.config`, `~/.cache`, and `~/.local` are bound from `~/.local/share/claude-sandbox/{config,cache,local}` on the host -- the host's real XDG dirs are invisible. Subprocess writes (LSP state, language-tool caches, app data under `~/.local/share`, state under `~/.local/state`, dotfile-style configs from `Bash` tool calls) persist across sessions on disk but never reach the host's real ones. `rm -rf ~/.local/share/claude-sandbox/{config,cache,local}` to reset. The existing read-only binds (`~/.local/bin`, `~/.local/share/pnpm`, `~/.local/share/claude`) layer on top of the overlay unchanged. If a package needs more of the host's XDG tree visible inside, add it via the extension hooks below.
 
 ## Docker / Podman
 
